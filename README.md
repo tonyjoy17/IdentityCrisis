@@ -1,22 +1,20 @@
-# 🎭 Identity Crisis — Multiplayer Web App
+# Identity Crisis - Multiplayer Web App
 
-A full multiplayer implementation of the Identity Crisis card game, built with vanilla HTML/CSS/JS and Supabase for real-time sync.
+A multiplayer implementation of the Identity Crisis card game, built with vanilla HTML, CSS, JavaScript, and Supabase Realtime.
 
----
-
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Create a Supabase Project
 
-1. Go to [supabase.com](https://supabase.com) and create a free account
-2. Create a new project
-3. Go to **Settings → API** and copy:
-   - **Project URL** (e.g. `https://xxxx.supabase.co`)
-   - **Anon public key** (starts with `eyJ...`)
+1. Go to https://supabase.com and create a free account.
+2. Create a new project.
+3. Go to Settings > API and copy:
+   - Project URL, for example `https://xxxx.supabase.co`
+   - Anon public key, which starts with `eyJ...`
 
 ### 2. Set Up the Database
 
-Open the **SQL Editor** in Supabase and run:
+Open the SQL Editor in Supabase and run:
 
 ```sql
 CREATE TABLE IF NOT EXISTS games (
@@ -30,82 +28,88 @@ ALTER TABLE games ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow all" ON games
   FOR ALL USING (true) WITH CHECK (true);
 
--- Enable realtime
 ALTER PUBLICATION supabase_realtime ADD TABLE games;
 ```
 
-### 3. Host the HTML File
+### 3. Add Supabase Config
 
-Just serve `identity-crisis.html` anywhere:
+Open `index.html` and fill in these constants near the top of the script:
 
-- **Locally**: Open the file directly in a browser or use `npx serve .`
-- **Netlify Drop**: Drag the file to [netlify.com/drop](https://netlify.com/drop)
-- **GitHub Pages**: Put the file in a repo and enable Pages
-- **Any static host**: Cloudflare Pages, Vercel, etc.
+```js
+const SUPABASE_URL = 'https://xxxx.supabase.co';
+const SUPABASE_ANON_KEY = 'your-anon-public-key';
+```
 
-### 4. Open & Configure
+The anon key is safe to publish in a browser app when Row Level Security policies are set correctly.
 
-When you first open the app, enter your Supabase URL and Anon Key. They're saved in `localStorage` — you only need to do this once per device.
+### 4. Host the Static Site
 
----
+Serve the repository root anywhere:
 
-## 🎮 How to Play
+- Render Static Site: build command blank or `echo "No build needed"`, publish directory `./`
+- Local test: use `python -m http.server 5173` or another static file server
+- Netlify Drop, GitHub Pages, Cloudflare Pages, or Vercel: publish the repo root
+
+### 5. Open and Play
+
+When `SUPABASE_URL` and `SUPABASE_ANON_KEY` are filled in, players go straight to the lobby and only need a name plus room code.
+
+If those constants are left blank, the app falls back to the setup screen and stores credentials in `localStorage` for that device.
+
+## How to Play
 
 ### Setup
-1. **Host** creates a room (gets a 4-letter room code)
-2. **Players** join using the room code (4–15 players)
-3. Host starts the game when everyone is in
+
+1. The host creates a room and gets a 4-character room code.
+2. Players join using the room code.
+3. The host starts the game when everyone is in.
 
 ### Roles
-- **Catcher** (1 player): Tries to steal cards during exchanges
-- **Identity Seekers** (everyone else): Try to find their own name card
+
+- Catcher: tries to steal cards during exchanges.
+- Identity Seekers: try to find their own name card.
 
 ### Gameplay
-- Cards are dealt randomly — nobody starts with their own card
-- 3 Extra cards are mixed in and placed in the Identity Bank at start
-- Players freely exchange cards with each other
-- The Catcher can **Snatch** cards during exchanges (player loses a wristband)
-- Use the Identity Bank to get mystery cards
-- Use Extra Cards for special effects
+
+- Cards are dealt randomly so nobody starts with their own card.
+- Three Extra cards are mixed in and placed in the Identity Bank at start.
+- Players exchange cards with each other.
+- The Catcher can snatch cards during exchanges, causing that player to lose a wristband.
+- Players can use the Identity Bank to get mystery cards.
+- Extra Cards trigger special effects.
 
 ### Winning
-- When the timer ends, everyone reveals their card
-- **Any player holding their own name card wins!**
-- If nobody has their own card: add 5 minutes and continue
 
----
+When the timer ends, everyone reveals their card. Any player holding their own name card wins.
 
-## ⚡ Features
+## Features
 
-- ✅ Real-time multiplayer (Supabase Realtime)
-- ✅ 4–15 players
-- ✅ Random Catcher assignment
-- ✅ Card exchanges with 5-second snatch window
-- ✅ Identity Bank (visit or take specific cards)
-- ✅ Extra Cards: Roll the Dice / Swap with Bank / Lose a Band
-- ✅ Wristband system (5 wristbands → eliminated)
-- ✅ Live event log
-- ✅ Configurable timer (5–30 min)
-- ✅ Play Again without re-joining
-- ✅ Mobile-friendly layout
+- Real-time multiplayer with Supabase Realtime
+- 4-15 players
+- Random Catcher assignment
+- Card exchanges with a 5-second snatch window
+- Identity Bank
+- Extra Cards: Roll the Dice, Swap with Bank, Lose a Band
+- Wristband system
+- Live event log
+- Configurable timer
+- Play Again without rejoining
+- Mobile-friendly layout
 
----
-
-## 🛠 Tech Stack
+## Tech Stack
 
 | Layer | Technology |
-|-------|-----------|
+| --- | --- |
 | Frontend | Vanilla HTML/CSS/JS |
-| Realtime | Supabase Realtime (Postgres Changes) |
-| Database | Supabase (PostgreSQL) |
-| Fonts | Google Fonts (Bebas Neue, Special Elite, Courier Prime) |
+| Realtime | Supabase Realtime |
+| Database | Supabase PostgreSQL |
+| Fonts | Google Fonts |
 | Hosting | Any static host |
 
----
+## Notes
 
-## 📝 Notes
-
-- The entire game state is stored as a single JSONB blob in Supabase and synced via Postgres Changes
-- All players subscribe to the same channel; the host drives game progression (timer end, game start)
-- Supabase free tier supports 500MB database and 2GB realtime traffic — more than enough for many games
-- Credentials are stored in `localStorage` client-side only
+- The game state is stored as a single JSONB blob in Supabase and synced through Postgres changes.
+- The host drives game progression, including start and timer end.
+- Supabase free tier is enough for many casual games.
+- Supabase URL and anon key can be built into `index.html` for deployed games.
+- If built-in config is blank, credentials are stored in `localStorage` client-side only.

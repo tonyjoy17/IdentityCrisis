@@ -645,7 +645,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE games;</div>
       <button class="btn btn-teal" onclick="joinGame()" style="width:100%;margin-top:8px;">Join Room</button>
     </div>
   </div>
-  <button class="btn btn-paper btn-sm" onclick="clearConfig()" style="margin-top:4px; opacity:0.6;">⚙ Change Supabase Config</button>
+  <button class="btn btn-paper btn-sm" id="cfg-change-btn" onclick="clearConfig()" style="margin-top:4px; opacity:0.6;">⚙ Change Supabase Config</button>
 </div>
 
 <!-- ====== SCREEN: WAITING ROOM ====== -->
@@ -878,11 +878,19 @@ ALTER PUBLICATION supabase_realtime ADD TABLE games;</div>
 // ==========================================
 
 // ---- SUPABASE INIT ----
+// Fill these in before deploying so players do not need to enter Supabase details.
+const SUPABASE_URL = 'https://ltojcpjnhrnnxoyitbir.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx0b2pjcGpuaHJubnhveWl0YmlyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAxMDU2NzUsImV4cCI6MjA5NTY4MTY3NX0.2XoDJLhbyETnvoGhq6zReIDIGNywhL7i77LgwqslWD0';
+
 let supabaseClient = null;
 let gameChannel = null;
 
 function initSupabase(url, key) {
   supabaseClient = window.supabase.createClient(url, key);
+}
+
+function hasBuiltInSupabaseConfig() {
+  return SUPABASE_URL.trim() !== '' && SUPABASE_ANON_KEY.trim() !== '';
 }
 
 function saveConfig() {
@@ -897,6 +905,10 @@ function saveConfig() {
 }
 
 function clearConfig() {
+  if (hasBuiltInSupabaseConfig()) {
+    toast('Supabase config is built into this deployed app.', 'info');
+    return;
+  }
   localStorage.removeItem('sb_url');
   localStorage.removeItem('sb_key');
   showScreen('screen-config');
@@ -1687,11 +1699,16 @@ document.querySelectorAll('.modal-overlay').forEach(overlay => {
 
 // ---- BOOT ----
 (function boot() {
-  const url = localStorage.getItem('sb_url');
-  const key = localStorage.getItem('sb_key');
+  const builtInUrl = SUPABASE_URL.trim();
+  const builtInKey = SUPABASE_ANON_KEY.trim();
+  const url = builtInUrl || localStorage.getItem('sb_url');
+  const key = builtInKey || localStorage.getItem('sb_key');
   if (url && key) {
     initSupabase(url, key);
     showScreen('screen-lobby');
+    if (hasBuiltInSupabaseConfig()) {
+      document.getElementById('cfg-change-btn').style.display = 'none';
+    }
   } else {
     showScreen('screen-config');
   }
