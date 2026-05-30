@@ -353,6 +353,16 @@
   .action-btn:active { transform: translate(2px,2px); box-shadow: 1px 1px 0 var(--ink); }
   .action-btn .icon { font-size: 1.6rem; }
   .action-btn .sub { font-size: 0.6rem; opacity: 0.7; letter-spacing: 1px; font-family: 'Courier Prime', monospace; text-transform: uppercase; }
+  .action-btn.disabled { opacity: 0.45; filter: grayscale(0.35); }
+  .action-btn.snatch-live {
+    animation: snatchPulse 0.55s ease-in-out infinite;
+    background: var(--gold);
+    color: var(--ink);
+  }
+  @keyframes snatchPulse {
+    0%, 100% { transform: scale(1); box-shadow: 3px 3px 0 var(--ink), 0 0 0 rgba(240,192,64,0); }
+    50% { transform: scale(1.04); box-shadow: 4px 5px 0 var(--ink), 0 0 18px rgba(240,192,64,0.75); }
+  }
   .ab-exchange { background: var(--teal); color: var(--paper); }
   .ab-bank { background: var(--paper); color: var(--ink); }
   .ab-extra { background: var(--purple); color: var(--paper); }
@@ -749,17 +759,17 @@ ALTER PUBLICATION supabase_realtime ADD TABLE games;</div>
             </div>
             <div class="action-btn ab-snatch" id="snatch-btn" onclick="openSnatchModal()" style="display:none;">
               <div class="icon">🫴</div>
-              <div>Snatch Card</div>
-              <div class="sub">during an exchange</div>
+              <div id="snatch-btn-title">Snatch Card</div>
+              <div class="sub" id="snatch-btn-sub">wait for exchange</div>
             </div>
           </div>
           <!-- Catcher special info -->
           <div class="catcher-zone" id="catcher-zone" style="display:none;">
             <div class="cz-title">⚠ Catcher Mode Active</div>
             <p style="font-family:'Courier Prime',monospace; font-size:0.78rem; line-height:1.5;">
-              Watch for exchanges! When players exchange cards, use <strong>Snatch</strong> to steal a card. 
+              Watch for exchanges! You have <strong>3 seconds</strong> to snatch after an exchange.
               Snatched card goes to bank OR back to player — your choice.
-              Player loses 1 wristband. 5 wristbands lost = eliminated!
+              After a successful snatch, you must wait before snatching again.
             </p>
           </div>
           <div class="info-box" id="seeker-info">
@@ -929,6 +939,9 @@ let extraTarget = null;
 let localTimerRunning = false;
 let localTimerEnd = null;
 
+const SNATCH_WINDOW_MS = 3000;
+const SNATCH_COOLDOWN_MS = 10000;
+
 // ---- UTILS ----
 function generateId(len) {
   return Math.random().toString(36).slice(2, 2 + len).toUpperCase();
@@ -997,6 +1010,7 @@ async function createGame() {
     }],
     bank: [],                // array of card objects {id, name, isExtra}
     pendingExchanges: [],    // [{id, from, to, fromCard, toCard, timestamp}]
+    catcherSnatchCooldownUntil: 0,
     log: [],
     extraCardsPool: 3,
     winner: null
@@ -1106,6 +1120,7 @@ async function startGame() {
     players,
     bank: bankCards,
     pendingExchanges: [],
+    catcherSnatchCooldownUntil: 0,
     log: ['Game started! The timer is running. Find your identity!'],
     winner: null
   };
@@ -1172,6 +1187,7 @@ function stopLocalTimer() {
 
 function tickTimer() {
   if (!gameState || gameState.phase !== 'playing') { stopLocalTimer(); return; }
+  updateSnatchButton();
   const remaining = localTimerEnd - Date.now();
   const disp = document.getElementById('timer-display');
   if (remaining <= 0) {
@@ -1233,6 +1249,7 @@ function renderGame() {
     catcherZone.style.display = 'block';
     snatchBtn.style.display = 'flex';
     seekerInfo.style.display = 'none';
+    updateSnatchButton();
   } else {
     catcherZone.style.display = 'none';
     snatchBtn.style.display = 'none';
@@ -1356,19 +1373,20 @@ async function confirmExchange() {
   toP.card = fromCard;
 
   // Record exchange for catcher
-  const exch = { id: exchId, from: myId, to: target.id, fromCard, toCard, timestamp: Date.now() };
+  const now = Date.now();
+  const exch = { id: exchId, from: myId, to: target.id, fromCard, toCard, timestamp: now, expiresAt: now + SNATCH_WINDOW_MS };
   state.pendingExchanges = [...(state.pendingExchanges || []), exch];
   addLog(state, `${me.name} exchanged cards with ${target.name}.`);
 
   await saveGame(state);
 
-  // Remove the pending exchange after 5 seconds (window for catcher)
+  // Remove the pending exchange after the snatch window closes.
   setTimeout(async () => {
     const fresh = await loadGame(roomCode);
     if (!fresh) return;
     fresh.pendingExchanges = (fresh.pendingExchanges || []).filter(e => e.id !== exchId);
     await saveGame(fresh);
-  }, 5000);
+  }, SNATCH_WINDOW_MS);
 
   toast(`Exchanged cards with ${target.name}!`, 'success');
 }
@@ -1516,10 +1534,62 @@ async function confirmExtraTarget() {
 }
 
 // ---- CATCHER: SNATCH ----
+function getActiveSnatchExchanges(state = gameState) {
+  const now = Date.now();
+  return (state?.pendingExchanges || []).filter(exch => {
+    const expiresAt = exch.expiresAt || (exch.timestamp + SNATCH_WINDOW_MS);
+    return expiresAt > now;
+  });
+}
+
+function getSnatchCooldownRemaining(state = gameState) {
+  const cooldownUntil = state?.catcherSnatchCooldownUntil || 0;
+  return Math.max(0, cooldownUntil - Date.now());
+}
+
+function updateSnatchButton() {
+  if (!gameState || gameState.phase !== 'playing') return;
+  const me = getMe();
+  if (!me || !me.isCatcher) return;
+
+  const btn = document.getElementById('snatch-btn');
+  const title = document.getElementById('snatch-btn-title');
+  const sub = document.getElementById('snatch-btn-sub');
+  const cooldown = getSnatchCooldownRemaining();
+  const active = getActiveSnatchExchanges();
+
+  btn.classList.remove('snatch-live', 'disabled');
+
+  if (cooldown > 0) {
+    title.textContent = 'Cooling Down';
+    sub.textContent = `${Math.ceil(cooldown / 1000)}s`;
+    btn.classList.add('disabled');
+    return;
+  }
+
+  if (active.length > 0) {
+    const nextExpiry = Math.min(...active.map(exch => exch.expiresAt || (exch.timestamp + SNATCH_WINDOW_MS)));
+    const remaining = Math.max(1, Math.ceil((nextExpiry - Date.now()) / 1000));
+    title.textContent = 'Snatch Available';
+    sub.textContent = `${remaining}s window`;
+    btn.classList.add('snatch-live');
+    return;
+  }
+
+  title.textContent = 'Snatch Card';
+  sub.textContent = 'wait for exchange';
+  btn.classList.add('disabled');
+}
+
 function openSnatchModal() {
   const me = getMe();
   if (!me || !me.isCatcher) return;
-  const exchanges = gameState.pendingExchanges || [];
+  const cooldown = getSnatchCooldownRemaining();
+  if (cooldown > 0) {
+    toast(`Snatch cooling down: ${Math.ceil(cooldown / 1000)}s`, 'warn');
+    return;
+  }
+  const exchanges = getActiveSnatchExchanges();
   if (exchanges.length === 0) { toast('No active exchanges to snatch from!', 'warn'); return; }
 
   const list = document.getElementById('snatch-exchange-list');
@@ -1529,9 +1599,19 @@ function openSnatchModal() {
     const fromP = gameState.players.find(p => p.id === exch.from);
     const toP = gameState.players.find(p => p.id === exch.to);
     if (!fromP || !toP) return;
+    const expiresAt = exch.expiresAt || (exch.timestamp + SNATCH_WINDOW_MS);
+    const remaining = Math.max(1, Math.ceil((expiresAt - Date.now()) / 1000));
     const item = document.createElement('div');
     item.className = 'player-select-item';
+    item.style.justifyContent = 'space-between';
     item.innerHTML = `<span>🔄</span><span>${fromP.name} ↔ ${toP.name}</span>`;
+    item.innerHTML = '';
+    const exchangeLabel = document.createElement('span');
+    exchangeLabel.textContent = `${fromP.name} <-> ${toP.name}`;
+    const countdownLabel = document.createElement('span');
+    countdownLabel.textContent = `${remaining}s`;
+    item.appendChild(exchangeLabel);
+    item.appendChild(countdownLabel);
     item.onclick = () => {
       document.querySelectorAll('#snatch-exchange-list .player-select-item').forEach(i => i.classList.remove('selected'));
       item.classList.add('selected');
@@ -1545,14 +1625,28 @@ function openSnatchModal() {
 async function confirmSnatch() {
   // Called from snatch-exchange selection
   if (!pendingSnatchId) { toast('Select an exchange', 'warn'); return; }
+  if (!getActiveSnatchExchanges().some(exch => exch.id === pendingSnatchId)) {
+    toast('Too late! That snatch window closed.', 'warn');
+    closeModal('modal-snatch');
+    return;
+  }
   closeModal('modal-snatch');
   await doSnatch(pendingSnatchId);
 }
 
 async function doSnatch(exchId) {
   const state = { ...gameState };
+  const cooldown = getSnatchCooldownRemaining(state);
+  if (cooldown > 0) { toast(`Snatch cooling down: ${Math.ceil(cooldown / 1000)}s`, 'warn'); return; }
   const exch = (state.pendingExchanges || []).find(e => e.id === exchId);
   if (!exch) { toast('Exchange no longer active', 'warn'); return; }
+  const expiresAt = exch.expiresAt || (exch.timestamp + SNATCH_WINDOW_MS);
+  if (expiresAt <= Date.now()) {
+    state.pendingExchanges = (state.pendingExchanges || []).filter(e => e.id !== exchId);
+    await saveGame(state);
+    toast('Too late! That snatch window closed.', 'warn');
+    return;
+  }
 
   // Take the "from" player's card (the one they just received = toCard)
   const fromP = state.players.find(p => p.id === exch.from);
@@ -1573,6 +1667,7 @@ async function doSnatch(exchId) {
 
   // Remove the pending exchange
   state.pendingExchanges = state.pendingExchanges.filter(e => e.id !== exchId);
+  state.catcherSnatchCooldownUntil = Date.now() + SNATCH_COOLDOWN_MS;
 
   await saveGame(state);
 
@@ -1663,6 +1758,7 @@ async function playAgain() {
     state.players.forEach(p => { p.card = null; p.eliminated = false; p.wristbands = 5; p.isCatcher = false; });
     state.bank = [];
     state.pendingExchanges = [];
+    state.catcherSnatchCooldownUntil = 0;
     state.log = [];
     state.timerEnd = null;
     await saveGame(state);

@@ -74,7 +74,7 @@ If those constants are left blank, the app falls back to the setup screen and st
 - Cards are dealt randomly so nobody starts with their own card.
 - Three Extra cards are mixed in and placed in the Identity Bank at start.
 - Players exchange cards with each other.
-- The Catcher can snatch cards during exchanges, causing that player to lose a wristband.
+- The Catcher can snatch during the 3-second window after an exchange, causing that player to lose a wristband.
 - Players can use the Identity Bank to get mystery cards.
 - Extra Cards trigger special effects.
 
@@ -87,7 +87,8 @@ When the timer ends, everyone reveals their card. Any player holding their own n
 - Real-time multiplayer with Supabase Realtime
 - 4-15 players
 - Random Catcher assignment
-- Card exchanges with a 5-second snatch window
+- Card exchanges with a 3-second snatch window
+- Catcher snatch cooldown after a successful snatch
 - Identity Bank
 - Extra Cards: Roll the Dice, Swap with Bank, Lose a Band
 - Wristband system
