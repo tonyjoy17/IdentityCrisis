@@ -213,6 +213,12 @@
     letter-spacing: 2px;
   }
   .game-header-title span { color: var(--red2); }
+  .host-restart-btn {
+    display: none;
+    font-size: 0.95rem;
+    padding: 7px 12px;
+    letter-spacing: 1px;
+  }
 
   /* Timer */
   .timer-display {
@@ -692,6 +698,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE games;</div>
   <div class="game-header">
     <div class="game-header-title">IDENTITY <span>CRISIS</span></div>
     <div style="display:flex; align-items:center; gap:12px;">
+      <button class="btn btn-paper host-restart-btn" id="host-restart-btn" onclick="restartGameNow()">Restart</button>
       <div class="role-badge" id="my-role-badge">SEEKER</div>
       <div class="timer-display" id="timer-display">10:00</div>
     </div>
@@ -1220,6 +1227,7 @@ function renderGame() {
   const badge = document.getElementById('my-role-badge');
   badge.textContent = me.isCatcher ? 'CATCHER' : 'SEEKER';
   badge.className = 'role-badge ' + (me.isCatcher ? 'catcher' : 'seeker');
+  document.getElementById('host-restart-btn').style.display = isHost ? 'inline-block' : 'none';
 
   // My card
   const cardEl = document.getElementById('my-identity-card');
@@ -1758,19 +1766,28 @@ function renderEndgame() {
 
 async function playAgain() {
   document.getElementById('overlay-endgame').classList.remove('active');
-  if (isHost) {
-    const state = await loadGame(roomCode);
-    if (!state) return;
-    // Reset to waiting
-    state.phase = 'waiting';
-    state.players.forEach(p => { p.card = null; p.eliminated = false; p.wristbands = 5; p.isCatcher = false; });
-    state.bank = [];
-    state.pendingExchanges = [];
-    state.catcherSnatchCooldownUntil = 0;
-    state.log = [];
-    state.timerEnd = null;
-    await saveGame(state);
-  }
+  if (isHost) await resetRoomToWaiting();
+}
+
+async function restartGameNow() {
+  if (!isHost) return;
+  const ok = confirm('Restart this room now? The current game will end and everyone returns to the waiting room.');
+  if (!ok) return;
+  await resetRoomToWaiting();
+  toast('Room restarted. Players are back in the waiting room.', 'info');
+}
+
+async function resetRoomToWaiting() {
+  const state = await loadGame(roomCode);
+  if (!state) return;
+  state.phase = 'waiting';
+  state.players.forEach(p => { p.card = null; p.eliminated = false; p.wristbands = 5; p.isCatcher = false; });
+  state.bank = [];
+  state.pendingExchanges = [];
+  state.catcherSnatchCooldownUntil = 0;
+  state.log = [];
+  state.timerEnd = null;
+  await saveGame(state);
 }
 
 function goLobby() {

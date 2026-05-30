@@ -95,6 +95,7 @@ When the timer ends, everyone reveals their card. Any player holding their own n
 - Live event log
 - Configurable timer
 - Host-only Play Again without rejoining
+- Host can restart the room during an active game
 - Mobile-friendly layout
 
 ## Tech Stack
