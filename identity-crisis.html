@@ -1,0 +1,1701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Identity Crisis — Multiplayer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Special+Elite&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  /* ===== DESIGN TOKENS ===== */
+  :root {
+    --ink: #1a1209;
+    --paper: #f5eed8;
+    --paper2: #ede4c4;
+    --red: #c0392b;
+    --red2: #e74c3c;
+    --teal: #1a7a6e;
+    --teal2: #21a899;
+    --gold: #d4a017;
+    --gold2: #f0c040;
+    --purple: #6c3483;
+    --orange: #e67e22;
+    --green: #27ae60;
+    --shadow: rgba(26,18,9,0.35);
+    --stamp-red: #c0392b;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Special Elite', serif;
+    background: var(--ink);
+    color: var(--ink);
+    min-height: 100vh;
+    background-image:
+      repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(255,255,255,0.03) 39px, rgba(255,255,255,0.03) 40px),
+      repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(255,255,255,0.03) 39px, rgba(255,255,255,0.03) 40px);
+    overflow-x: hidden;
+  }
+
+  /* ===== NOISE TEXTURE ===== */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 9999; opacity: 0.4;
+  }
+
+  /* ===== SCREENS ===== */
+  .screen { display: none; min-height: 100vh; padding: 20px; }
+  .screen.active { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+
+  /* ===== PAPER CARD ===== */
+  .paper {
+    background: var(--paper);
+    border-radius: 4px;
+    box-shadow: 4px 4px 0 var(--ink), 8px 8px 20px var(--shadow);
+    position: relative;
+    overflow: hidden;
+  }
+  .paper::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 27px, rgba(26,18,9,0.07) 27px, rgba(26,18,9,0.07) 28px);
+    pointer-events: none;
+  }
+
+  /* ===== TITLE ===== */
+  .game-title {
+    font-family: 'Bebas Neue', sans-serif;
+    color: var(--paper);
+    text-align: center;
+    line-height: 0.85;
+    text-shadow: 3px 3px 0 var(--red), 6px 6px 0 rgba(0,0,0,0.5);
+    letter-spacing: 2px;
+    animation: titlePulse 3s ease-in-out infinite;
+  }
+  .game-title .crisis { color: var(--red2); font-size: 1.4em; }
+  @keyframes titlePulse {
+    0%, 100% { text-shadow: 3px 3px 0 var(--red), 6px 6px 0 rgba(0,0,0,0.5); }
+    50% { text-shadow: 3px 3px 0 var(--red), 6px 6px 20px rgba(192,57,43,0.5); }
+  }
+
+  .tagline {
+    font-family: 'Courier Prime', monospace;
+    color: var(--paper2);
+    font-size: 0.9rem;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    opacity: 0.8;
+    text-align: center;
+    margin-top: 8px;
+  }
+
+  /* ===== BUTTONS ===== */
+  .btn {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.3rem;
+    letter-spacing: 2px;
+    padding: 12px 32px;
+    border: 3px solid var(--ink);
+    cursor: pointer;
+    transition: all 0.12s;
+    position: relative;
+    display: inline-block;
+    box-shadow: 3px 3px 0 var(--ink);
+    text-transform: uppercase;
+  }
+  .btn:active { transform: translate(2px,2px); box-shadow: 1px 1px 0 var(--ink); }
+  .btn-red { background: var(--red); color: var(--paper); }
+  .btn-red:hover { background: var(--red2); }
+  .btn-teal { background: var(--teal); color: var(--paper); }
+  .btn-teal:hover { background: var(--teal2); }
+  .btn-gold { background: var(--gold); color: var(--ink); }
+  .btn-gold:hover { background: var(--gold2); }
+  .btn-paper { background: var(--paper); color: var(--ink); }
+  .btn-paper:hover { background: var(--paper2); }
+  .btn-purple { background: var(--purple); color: var(--paper); }
+  .btn-sm { font-size: 1rem; padding: 8px 20px; }
+
+  /* ===== INPUTS ===== */
+  input[type=text], input[type=number] {
+    font-family: 'Courier Prime', monospace;
+    font-size: 1.1rem;
+    padding: 10px 14px;
+    border: 3px solid var(--ink);
+    background: var(--paper);
+    color: var(--ink);
+    outline: none;
+    width: 100%;
+    box-shadow: 2px 2px 0 var(--ink);
+  }
+  input::placeholder { opacity: 0.4; }
+  label { font-family: 'Bebas Neue', sans-serif; font-size: 1rem; letter-spacing: 1px; display: block; margin-bottom: 4px; }
+
+  /* ===== LOBBY SCREEN ===== */
+  #screen-lobby { gap: 24px; }
+
+  .lobby-title-area { text-align: center; margin-bottom: 10px; }
+  .lobby-title-area .game-title { font-size: clamp(3rem, 10vw, 6rem); }
+
+  .lobby-panels {
+    display: flex; gap: 20px; flex-wrap: wrap; justify-content: center;
+    width: 100%; max-width: 700px;
+  }
+  .lobby-panel {
+    flex: 1; min-width: 280px;
+    padding: 24px; position: relative;
+  }
+  .panel-header {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.4rem; letter-spacing: 2px;
+    padding: 6px 14px;
+    display: inline-block;
+    margin-bottom: 16px;
+    position: relative; left: -24px;
+    box-shadow: 2px 2px 0 rgba(0,0,0,0.3);
+  }
+  .ph-red { background: var(--red); color: var(--paper); }
+  .ph-teal { background: var(--teal); color: var(--paper); }
+
+  .form-group { margin-bottom: 14px; }
+  .form-group label { color: var(--ink); margin-bottom: 6px; }
+
+  /* ===== WAITING ROOM ===== */
+  #screen-waiting { gap: 20px; }
+  .room-code-display {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(3rem, 12vw, 6rem);
+    color: var(--paper);
+    letter-spacing: 12px;
+    text-shadow: 4px 4px 0 var(--red);
+    text-align: center;
+  }
+  .room-label {
+    font-family: 'Courier Prime', monospace;
+    color: var(--paper2); font-size: 0.85rem;
+    letter-spacing: 4px; text-transform: uppercase; text-align: center;
+  }
+  .player-list {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    padding: 20px; max-width: 600px; width: 100%;
+  }
+  .player-chip {
+    font-family: 'Courier Prime', monospace;
+    padding: 8px 16px;
+    border: 2px solid var(--ink);
+    background: var(--paper);
+    font-size: 0.95rem;
+    display: flex; align-items: center; gap: 8px;
+    box-shadow: 2px 2px 0 var(--ink);
+    animation: chipIn 0.3s ease;
+  }
+  @keyframes chipIn { from { transform: scale(0.7) rotate(-5deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
+  .chip-catcher { border-color: var(--red); background: #fde8e6; }
+  .chip-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--teal); }
+  .chip-dot.catcher { background: var(--red); }
+
+  /* ===== GAME SCREEN ===== */
+  #screen-game { justify-content: flex-start; padding: 10px; gap: 10px; }
+
+  .game-header {
+    width: 100%; max-width: 900px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px;
+    background: var(--ink);
+    border-bottom: 4px solid var(--red);
+  }
+  .game-header-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.6rem; color: var(--paper);
+    letter-spacing: 2px;
+  }
+  .game-header-title span { color: var(--red2); }
+
+  /* Timer */
+  .timer-display {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2.2rem; color: var(--gold2);
+    letter-spacing: 3px;
+    text-shadow: 0 0 10px rgba(240,192,64,0.5);
+    min-width: 80px; text-align: center;
+  }
+  .timer-display.urgent { color: var(--red2); animation: timerBlink 0.5s step-end infinite; }
+  @keyframes timerBlink { 50% { opacity: 0.4; } }
+
+  /* Role badge */
+  .role-badge {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1rem; letter-spacing: 1px;
+    padding: 4px 12px;
+    border: 2px solid;
+  }
+  .role-badge.seeker { border-color: var(--teal2); color: var(--teal2); }
+  .role-badge.catcher { border-color: var(--red2); color: var(--red2); }
+
+  .game-layout {
+    display: flex; gap: 12px; width: 100%; max-width: 900px;
+    flex-wrap: wrap; justify-content: center;
+  }
+
+  /* Identity card */
+  .identity-card-area { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .identity-card {
+    width: 160px; height: 220px;
+    border: 4px solid var(--ink);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px; cursor: pointer; transition: transform 0.2s;
+    box-shadow: 4px 4px 0 var(--ink);
+    position: relative; overflow: hidden;
+  }
+  .identity-card:hover { transform: translateY(-4px) rotate(1deg); }
+  .card-front { background: var(--paper); }
+  .card-back { background: var(--ink); }
+  .card-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.6rem; color: var(--ink);
+    text-align: center; letter-spacing: 1px;
+    padding: 0 10px;
+  }
+  .card-label {
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.65rem; letter-spacing: 2px; text-transform: uppercase; color: #888; text-align: center;
+  }
+  .card-icon { font-size: 2.5rem; }
+  .card-back .card-icon { color: var(--paper); }
+  .card-back .card-label { color: var(--paper2); opacity: 0.6; }
+  .card-extra { background: linear-gradient(135deg, var(--purple), #9b59b6); border-color: var(--purple); }
+  .card-extra .card-icon { color: var(--paper); }
+  .card-extra .card-name { color: var(--paper); }
+  .card-extra .card-label { color: rgba(255,255,255,0.7); }
+
+  /* Wristbands */
+  .wristbands {
+    display: flex; gap: 5px; flex-wrap: wrap; justify-content: center;
+    padding: 6px;
+  }
+  .wristband {
+    width: 28px; height: 16px;
+    border-radius: 8px;
+    border: 2px solid var(--ink);
+    transition: all 0.3s;
+  }
+  .wristband.active { background: var(--teal2); box-shadow: 0 0 6px rgba(33,168,153,0.5); }
+  .wristband.lost { background: #ddd; opacity: 0.4; }
+
+  /* Player list sidebar */
+  .sidebar {
+    flex: 1; min-width: 200px; max-width: 260px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .sidebar-section {
+    padding: 14px;
+  }
+  .sidebar-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1rem; letter-spacing: 2px;
+    padding: 4px 10px;
+    margin-bottom: 10px;
+    display: inline-block;
+  }
+  .st-red { background: var(--red); color: var(--paper); }
+  .st-teal { background: var(--teal); color: var(--paper); }
+  .st-gold { background: var(--gold); color: var(--ink); }
+
+  .player-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 8px;
+    border: 2px solid transparent;
+    margin-bottom: 4px;
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+  }
+  .player-row.me { border-color: var(--teal); background: rgba(26,122,110,0.08); }
+  .player-row.catcher-row { border-color: var(--red); background: rgba(192,57,43,0.08); }
+  .player-row.eliminated { opacity: 0.4; text-decoration: line-through; }
+  .player-row .bands { display: flex; gap: 2px; }
+  .mini-band { width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--ink); }
+  .mini-band.active { background: var(--teal2); }
+  .mini-band.lost { background: #ddd; }
+  .player-name-col { flex: 1; }
+
+  /* Action panel */
+  .action-panel {
+    flex: 2; min-width: 280px;
+    display: flex; flex-direction: column; gap: 10px;
+    padding: 14px;
+  }
+  .action-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.1rem; letter-spacing: 2px;
+    padding: 4px 12px; display: inline-block;
+  }
+
+  .action-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .action-btn {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1rem; letter-spacing: 1px;
+    padding: 14px 10px;
+    border: 3px solid var(--ink);
+    cursor: pointer;
+    transition: all 0.1s;
+    text-align: center;
+    box-shadow: 3px 3px 0 var(--ink);
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .action-btn:hover { transform: translateY(-2px); box-shadow: 4px 5px 0 var(--ink); }
+  .action-btn:active { transform: translate(2px,2px); box-shadow: 1px 1px 0 var(--ink); }
+  .action-btn .icon { font-size: 1.6rem; }
+  .action-btn .sub { font-size: 0.6rem; opacity: 0.7; letter-spacing: 1px; font-family: 'Courier Prime', monospace; text-transform: uppercase; }
+  .ab-exchange { background: var(--teal); color: var(--paper); }
+  .ab-bank { background: var(--paper); color: var(--ink); }
+  .ab-extra { background: var(--purple); color: var(--paper); }
+  .ab-snatch { background: var(--red); color: var(--paper); }
+
+  /* Identity Bank */
+  .bank-area { padding: 12px; }
+  .bank-cards {
+    display: flex; gap: 6px; flex-wrap: wrap; min-height: 50px;
+    padding: 8px; border: 2px dashed rgba(26,18,9,0.3);
+  }
+  .bank-card-mini {
+    width: 40px; height: 55px;
+    background: var(--ink); border: 2px solid var(--paper);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem; color: var(--paper);
+    cursor: pointer; transition: transform 0.15s;
+    box-shadow: 2px 2px 0 rgba(0,0,0,0.4);
+  }
+  .bank-card-mini:hover { transform: scale(1.1) rotate(-3deg); }
+
+  /* Log / event feed */
+  .event-log { padding: 12px; }
+  .log-entries {
+    max-height: 160px; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .log-entry {
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.75rem; color: var(--ink);
+    padding: 4px 8px;
+    border-left: 3px solid var(--gold);
+    background: rgba(212,160,23,0.08);
+    animation: logSlide 0.3s ease;
+  }
+  @keyframes logSlide { from { transform: translateX(-10px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+  /* ===== MODALS ===== */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.75); z-index: 1000;
+    align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal {
+    max-width: 480px; width: 100%;
+    padding: 28px;
+    animation: modalIn 0.25s ease;
+  }
+  @keyframes modalIn { from { transform: scale(0.8) rotate(-2deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
+  .modal-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.8rem; letter-spacing: 2px;
+    color: var(--ink); margin-bottom: 16px;
+  }
+
+  .player-select-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+  .player-select-item {
+    padding: 10px 14px;
+    border: 3px solid var(--ink);
+    cursor: pointer; font-family: 'Courier Prime', monospace;
+    transition: all 0.1s; background: var(--paper2);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .player-select-item:hover { background: var(--ink); color: var(--paper); }
+  .player-select-item.selected { background: var(--teal); color: var(--paper); border-color: var(--teal); }
+
+  /* Extra card modal */
+  .extra-card-options { display: grid; grid-template-columns: 1fr; gap: 10px; }
+  .extra-opt {
+    padding: 16px; border: 3px solid var(--ink);
+    cursor: pointer; transition: all 0.12s; background: var(--paper2);
+    box-shadow: 3px 3px 0 var(--ink);
+  }
+  .extra-opt:hover { transform: translateY(-2px); }
+  .extra-opt .opt-title { font-family: 'Bebas Neue', sans-serif; font-size: 1.2rem; letter-spacing: 1px; }
+  .extra-opt .opt-desc { font-family: 'Courier Prime', monospace; font-size: 0.8rem; margin-top: 4px; opacity: 0.7; }
+  .eo-red { border-left: 6px solid var(--red); }
+  .eo-teal { border-left: 6px solid var(--teal); }
+  .eo-orange { border-left: 6px solid var(--orange); }
+
+  /* End game overlay */
+  #overlay-endgame {
+    display: none; position: fixed; inset: 0; z-index: 2000;
+    background: rgba(0,0,0,0.9);
+    align-items: center; justify-content: center;
+    flex-direction: column; gap: 20px;
+  }
+  #overlay-endgame.active { display: flex; }
+  .endgame-card {
+    padding: 40px; text-align: center; max-width: 500px; width: 100%;
+    animation: modalIn 0.4s ease;
+  }
+  .endgame-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(2rem, 8vw, 4rem);
+    color: var(--red); letter-spacing: 4px;
+    text-shadow: 3px 3px 0 var(--ink);
+    margin-bottom: 10px;
+  }
+  .endgame-subtitle { font-family: 'Courier Prime', monospace; font-size: 0.9rem; margin-bottom: 20px; color: #666; }
+  .winner-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+  .winner-item {
+    padding: 12px 20px; font-family: 'Bebas Neue', sans-serif; font-size: 1.2rem;
+    letter-spacing: 1px; display: flex; align-items: center; gap: 10px;
+  }
+  .winner-item.won { background: var(--gold); color: var(--ink); border: 3px solid var(--ink); }
+  .winner-item.lost { background: var(--paper2); color: var(--ink); border: 3px solid rgba(0,0,0,0.2); opacity: 0.7; }
+
+  /* Toast notifications */
+  #toast-container {
+    position: fixed; top: 16px; right: 16px;
+    z-index: 5000; display: flex; flex-direction: column; gap: 8px;
+    max-width: 320px;
+  }
+  .toast {
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.85rem; padding: 12px 16px;
+    border: 2px solid var(--ink);
+    box-shadow: 3px 3px 0 var(--ink);
+    animation: toastIn 0.3s ease; position: relative;
+  }
+  @keyframes toastIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  .toast-info { background: var(--teal); color: var(--paper); }
+  .toast-warn { background: var(--orange); color: var(--paper); }
+  .toast-error { background: var(--red); color: var(--paper); }
+  .toast-success { background: var(--green); color: var(--paper); }
+
+  /* Config setup note */
+  .config-note {
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.75rem; color: rgba(255,255,255,0.5);
+    text-align: center; max-width: 500px; line-height: 1.6;
+    padding: 10px;
+  }
+  .config-note code {
+    background: rgba(255,255,255,0.1); padding: 1px 5px;
+    border-radius: 2px; font-size: 0.8rem;
+  }
+
+  /* Waiting pulse animation */
+  .waiting-pulse {
+    display: inline-block;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  /* Info section */
+  .info-box {
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.8rem; padding: 10px 14px;
+    border-left: 4px solid var(--gold);
+    background: rgba(212,160,23,0.12);
+    margin-top: 10px; line-height: 1.6;
+  }
+
+  /* Catcher action section */
+  .catcher-zone {
+    padding: 10px; border: 3px dashed var(--red);
+    background: rgba(192,57,43,0.05);
+    margin-top: 6px;
+  }
+  .catcher-zone .cz-title {
+    font-family: 'Bebas Neue', sans-serif;
+    color: var(--red); letter-spacing: 2px; font-size: 1rem;
+    margin-bottom: 8px;
+  }
+
+  /* Divider */
+  hr.ink { border: none; border-top: 3px solid var(--ink); margin: 10px 0; }
+
+  /* Config screen */
+  #screen-config { gap: 16px; }
+  .config-box { padding: 30px; max-width: 560px; width: 100%; }
+  .config-box h2 {
+    font-family: 'Bebas Neue', sans-serif; font-size: 1.8rem;
+    letter-spacing: 3px; color: var(--ink); margin-bottom: 20px;
+  }
+  .config-steps { display: flex; flex-direction: column; gap: 16px; }
+  .config-step { display: flex; gap: 12px; align-items: flex-start; }
+  .step-num {
+    font-family: 'Bebas Neue', sans-serif; font-size: 1.4rem;
+    color: var(--paper); background: var(--red);
+    width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+    border: 2px solid var(--ink); flex-shrink: 0;
+  }
+  .step-body { flex: 1; }
+  .step-body p { font-family: 'Courier Prime', monospace; font-size: 0.85rem; line-height: 1.5; }
+  .step-body code {
+    background: rgba(26,18,9,0.1); padding: 2px 6px;
+    font-size: 0.8rem; border: 1px solid rgba(26,18,9,0.2);
+  }
+
+  @media(max-width: 600px) {
+    .action-grid { grid-template-columns: 1fr 1fr; }
+    .game-layout { flex-direction: column; }
+    .sidebar { max-width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ====== TOAST CONTAINER ====== -->
+<div id="toast-container"></div>
+
+<!-- ====== SCREEN: CONFIG ====== -->
+<div class="screen active" id="screen-config">
+  <div class="paper config-box">
+    <h2>🔧 Supabase Setup Required</h2>
+    <div class="config-steps">
+      <div class="config-step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <p>Create a free project at <strong>supabase.com</strong> and get your <strong>Project URL</strong> and <strong>Anon Key</strong> from Settings → API.</p>
+        </div>
+      </div>
+      <div class="config-step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <p>Run this SQL in the Supabase SQL Editor to create the games table:</p>
+          <div style="margin-top:8px; background:#1a1209; color:#f5eed8; padding:12px; border-radius:2px; font-family:'Courier Prime',monospace; font-size:0.75rem; white-space:pre-wrap;">CREATE TABLE IF NOT EXISTS games (
+  id TEXT PRIMARY KEY,
+  state JSONB NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE games ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow all" ON games
+  FOR ALL USING (true) WITH CHECK (true);
+
+-- Enable realtime
+ALTER PUBLICATION supabase_realtime ADD TABLE games;</div>
+        </div>
+      </div>
+      <div class="config-step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <p>Enter your credentials below:</p>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:20px; display:flex; flex-direction:column; gap:12px;">
+      <div class="form-group">
+        <label>Supabase Project URL</label>
+        <input type="text" id="cfg-url" placeholder="https://xxxx.supabase.co">
+      </div>
+      <div class="form-group">
+        <label>Supabase Anon Key</label>
+        <input type="text" id="cfg-key" placeholder="eyJhbGciOiJ...">
+      </div>
+      <button class="btn btn-red" id="cfg-save-btn" onclick="saveConfig()">Save & Continue</button>
+    </div>
+  </div>
+  <p class="config-note">Your credentials are stored in <code>localStorage</code> on this device only and never sent anywhere except to Supabase.</p>
+</div>
+
+<!-- ====== SCREEN: LOBBY ====== -->
+<div class="screen" id="screen-lobby">
+  <div class="lobby-title-area">
+    <div class="game-title">IDENTITY<br><span class="crisis">CRISIS</span></div>
+    <div class="tagline">Can you find yourself before time runs out?</div>
+  </div>
+  <div class="lobby-panels">
+    <!-- Create Game -->
+    <div class="paper lobby-panel">
+      <div class="panel-header ph-red">Create Game</div>
+      <div class="form-group">
+        <label>Your Name</label>
+        <input type="text" id="host-name" placeholder="Enter your name" maxlength="20">
+      </div>
+      <div class="form-group">
+        <label>Timer (minutes)</label>
+        <input type="number" id="host-timer" value="10" min="5" max="30">
+      </div>
+      <button class="btn btn-red" onclick="createGame()" style="width:100%;margin-top:8px;">Create Room</button>
+    </div>
+    <!-- Join Game -->
+    <div class="paper lobby-panel">
+      <div class="panel-header ph-teal">Join Game</div>
+      <div class="form-group">
+        <label>Your Name</label>
+        <input type="text" id="join-name" placeholder="Enter your name" maxlength="20">
+      </div>
+      <div class="form-group">
+        <label>Room Code</label>
+        <input type="text" id="join-code" placeholder="e.g. XKCD" maxlength="6" style="text-transform:uppercase;letter-spacing:4px;">
+      </div>
+      <button class="btn btn-teal" onclick="joinGame()" style="width:100%;margin-top:8px;">Join Room</button>
+    </div>
+  </div>
+  <button class="btn btn-paper btn-sm" onclick="clearConfig()" style="margin-top:4px; opacity:0.6;">⚙ Change Supabase Config</button>
+</div>
+
+<!-- ====== SCREEN: WAITING ROOM ====== -->
+<div class="screen" id="screen-waiting">
+  <div style="text-align:center;">
+    <div class="room-label">Room Code</div>
+    <div class="room-code-display" id="waiting-code">----</div>
+    <div class="room-label" style="margin-top:4px;">Share this code with other players</div>
+  </div>
+
+  <div class="paper" style="padding:20px; width:100%; max-width:500px;">
+    <div style="font-family:'Bebas Neue',sans-serif; font-size:1.1rem; letter-spacing:2px; margin-bottom:12px;">
+      Players <span id="waiting-count">0</span>/15
+    </div>
+    <div class="player-list" id="waiting-players" style="padding:0;"></div>
+    <div class="info-box">
+      Players: 4–15 · One player will randomly become the <strong>Catcher</strong> · Everyone else is an <strong>Identity Seeker</strong>
+    </div>
+  </div>
+
+  <div id="host-start-area" style="display:none; text-align:center;">
+    <button class="btn btn-gold" onclick="startGame()" id="start-btn">Start Game</button>
+    <p style="font-family:'Courier Prime',monospace; font-size:0.75rem; color:var(--paper2); margin-top:8px; opacity:0.7;">
+      Need at least 4 players to start
+    </p>
+  </div>
+  <div id="guest-wait-area" style="color:var(--paper2); font-family:'Courier Prime',monospace; font-size:0.85rem; text-align:center;">
+    Waiting for host to start <span class="waiting-pulse">...</span>
+  </div>
+</div>
+
+<!-- ====== SCREEN: GAME ====== -->
+<div class="screen" id="screen-game">
+  <div class="game-header">
+    <div class="game-header-title">IDENTITY <span>CRISIS</span></div>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <div class="role-badge" id="my-role-badge">SEEKER</div>
+      <div class="timer-display" id="timer-display">10:00</div>
+    </div>
+  </div>
+
+  <div class="game-layout">
+    <!-- SIDEBAR: Players -->
+    <div class="sidebar">
+      <div class="paper sidebar-section">
+        <div class="sidebar-title st-red">Players</div>
+        <div id="players-list"></div>
+      </div>
+
+      <!-- Identity Bank -->
+      <div class="paper bank-area">
+        <div class="sidebar-title st-gold">Identity Bank</div>
+        <div class="bank-cards" id="bank-cards">
+          <span style="font-family:'Courier Prime',monospace; font-size:0.7rem; opacity:0.4; align-self:center;">empty</span>
+        </div>
+        <div style="font-family:'Courier Prime',monospace; font-size:0.7rem; opacity:0.5; margin-top:6px; padding:2px 4px;">
+          Click a bank card to take it (replaces your card)
+        </div>
+      </div>
+
+      <!-- Event Log -->
+      <div class="paper event-log">
+        <div class="sidebar-title st-teal" style="display:block;">Event Log</div>
+        <div class="log-entries" id="log-entries"></div>
+      </div>
+    </div>
+
+    <!-- MAIN: My Card + Actions -->
+    <div class="action-panel paper">
+      <div style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap;">
+        <!-- My identity card -->
+        <div class="identity-card-area">
+          <div style="font-family:'Bebas Neue',sans-serif; font-size:0.9rem; letter-spacing:2px; margin-bottom:4px;">My Card</div>
+          <div class="identity-card card-front" id="my-identity-card" title="Click to inspect">
+            <div class="card-icon">🃏</div>
+            <div class="card-name" id="my-card-name">???</div>
+            <div class="card-label">identity card</div>
+          </div>
+          <div class="wristbands" id="my-wristbands"></div>
+          <div style="font-family:'Courier Prime',monospace; font-size:0.7rem; text-align:center; opacity:0.6;" id="wristband-count">5 wristbands</div>
+        </div>
+
+        <!-- Actions -->
+        <div style="flex:1; min-width:200px;">
+          <div class="action-title" style="background:var(--ink); color:var(--paper);">Actions</div>
+          <div class="action-grid" id="action-grid">
+            <div class="action-btn ab-exchange" onclick="openExchangeModal()">
+              <div class="icon">🤝</div>
+              <div>Exchange Card</div>
+              <div class="sub">with another player</div>
+            </div>
+            <div class="action-btn ab-bank" onclick="visitBank()">
+              <div class="icon">🏦</div>
+              <div>Visit Bank</div>
+              <div class="sub">take a card from bank</div>
+            </div>
+            <div class="action-btn ab-extra" onclick="openExtraModal()">
+              <div class="icon">❓</div>
+              <div>Use Extra Card</div>
+              <div class="sub">if you hold one</div>
+            </div>
+            <div class="action-btn ab-snatch" id="snatch-btn" onclick="openSnatchModal()" style="display:none;">
+              <div class="icon">🫴</div>
+              <div>Snatch Card</div>
+              <div class="sub">during an exchange</div>
+            </div>
+          </div>
+          <!-- Catcher special info -->
+          <div class="catcher-zone" id="catcher-zone" style="display:none;">
+            <div class="cz-title">⚠ Catcher Mode Active</div>
+            <p style="font-family:'Courier Prime',monospace; font-size:0.78rem; line-height:1.5;">
+              Watch for exchanges! When players exchange cards, use <strong>Snatch</strong> to steal a card. 
+              Snatched card goes to bank OR back to player — your choice.
+              Player loses 1 wristband. 5 wristbands lost = eliminated!
+            </p>
+          </div>
+          <div class="info-box" id="seeker-info">
+            Exchange cards with other players to find your own identity!
+            Visit the Bank to swap with a mystery card.
+            Hold your own name card when time runs out to <strong>win</strong>!
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== MODALS ====== -->
+
+<!-- Exchange Modal -->
+<div class="modal-overlay" id="modal-exchange">
+  <div class="paper modal">
+    <div class="modal-title">🤝 Exchange Card</div>
+    <p style="font-family:'Courier Prime',monospace; font-size:0.85rem; margin-bottom:14px; opacity:0.7;">
+      Choose a player to exchange identity cards with. Both cards swap simultaneously.
+    </p>
+    <div class="player-select-list" id="exchange-player-list"></div>
+    <div style="display:flex; gap:10px;">
+      <button class="btn btn-teal" onclick="confirmExchange()">Exchange</button>
+      <button class="btn btn-paper" onclick="closeModal('modal-exchange')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Snatch Modal (Catcher) -->
+<div class="modal-overlay" id="modal-snatch">
+  <div class="paper modal">
+    <div class="modal-title" style="color:var(--red);">🫴 Snatch During Exchange</div>
+    <p style="font-family:'Courier Prime',monospace; font-size:0.85rem; margin-bottom:14px; opacity:0.7;">
+      Select an active exchange to snatch from. The player loses 1 wristband.
+    </p>
+    <div class="player-select-list" id="snatch-exchange-list"></div>
+    <div style="display:flex; gap:10px; margin-top:10px;">
+      <button class="btn btn-paper" onclick="closeModal('modal-snatch')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Snatch Result Modal (Catcher decides what to do with snatched card) -->
+<div class="modal-overlay" id="modal-snatch-result">
+  <div class="paper modal">
+    <div class="modal-title" style="color:var(--red);">🫴 You Snatched a Card!</div>
+    <p style="font-family:'Courier Prime',monospace; font-size:0.85rem; margin-bottom:14px;">
+      You snatched <strong id="snatched-card-name">???</strong> from the exchange.
+      What do you want to do with it?
+    </p>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <button class="btn btn-red" onclick="snatchDecision('bank')">Send to Identity Bank (face down)</button>
+      <button class="btn btn-teal" onclick="snatchDecision('return')">Return it to original player</button>
+    </div>
+  </div>
+</div>
+
+<!-- Extra Card Modal -->
+<div class="modal-overlay" id="modal-extra">
+  <div class="paper modal">
+    <div class="modal-title">❓ Use Extra Card</div>
+    <p style="font-family:'Courier Prime',monospace; font-size:0.85rem; margin-bottom:14px; opacity:0.7;">
+      You hold an Extra Card. Choose its effect:
+    </p>
+    <div class="extra-card-options" id="extra-card-options">
+      <div class="extra-opt eo-red" onclick="useExtra('roll_dice')">
+        <div class="opt-title">🎲 Roll The Dice</div>
+        <div class="opt-desc">Choose a player. Roll the die — exchange with the player that many seats to their right.</div>
+      </div>
+      <div class="extra-opt eo-teal" onclick="useExtra('swap_bank')">
+        <div class="opt-title">🏦 Swap With Bank</div>
+        <div class="opt-desc">Choose a player — they swap their card with a random card from the Identity Bank.</div>
+      </div>
+      <div class="extra-opt eo-orange" onclick="useExtra('lose_band')">
+        <div class="opt-title">💢 Lose A Band</div>
+        <div class="opt-desc">Choose a player — they immediately lose 1 wristband. If it's their last, they're eliminated!</div>
+      </div>
+    </div>
+    <button class="btn btn-paper" onclick="closeModal('modal-extra')" style="margin-top:14px;">Cancel</button>
+  </div>
+</div>
+
+<!-- Extra: Choose Player (for extra card effects) -->
+<div class="modal-overlay" id="modal-extra-target">
+  <div class="paper modal">
+    <div class="modal-title" id="extra-target-title">Choose a Player</div>
+    <div class="player-select-list" id="extra-target-list"></div>
+    <div style="display:flex; gap:10px; margin-top:10px;">
+      <button class="btn btn-purple" onclick="confirmExtraTarget()">Confirm</button>
+      <button class="btn btn-paper" onclick="closeModal('modal-extra-target')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Identity Reveal Overlay -->
+<div id="overlay-endgame">
+  <div style="font-family:'Bebas Neue',sans-serif; font-size:clamp(2rem,8vw,5rem); color:var(--paper); letter-spacing:6px; text-align:center; text-shadow:4px 4px 0 var(--red); animation:titlePulse 1s ease-in-out infinite;">
+    "IDENTITY REVEAL!"
+  </div>
+  <div class="paper endgame-card">
+    <div class="endgame-title">GAME OVER</div>
+    <div class="endgame-subtitle">All players reveal their identity cards</div>
+    <div class="winner-list" id="endgame-results"></div>
+    <div style="display:flex; gap:10px; justify-content:center;">
+      <button class="btn btn-gold" onclick="playAgain()">Play Again</button>
+      <button class="btn btn-paper" onclick="goLobby()">Leave Game</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==========================================
+// IDENTITY CRISIS — MULTIPLAYER GAME ENGINE
+// ==========================================
+
+// ---- SUPABASE INIT ----
+let supabaseClient = null;
+let gameChannel = null;
+
+function initSupabase(url, key) {
+  supabaseClient = window.supabase.createClient(url, key);
+}
+
+function saveConfig() {
+  const url = document.getElementById('cfg-url').value.trim();
+  const key = document.getElementById('cfg-key').value.trim();
+  if (!url || !key) { toast('Enter both URL and Key', 'error'); return; }
+  if (!url.startsWith('https://')) { toast('URL must start with https://', 'error'); return; }
+  localStorage.setItem('sb_url', url);
+  localStorage.setItem('sb_key', key);
+  initSupabase(url, key);
+  showScreen('screen-lobby');
+}
+
+function clearConfig() {
+  localStorage.removeItem('sb_url');
+  localStorage.removeItem('sb_key');
+  showScreen('screen-config');
+}
+
+// ---- LOCAL STATE ----
+let myId = generateId(8);      // local player id (uuid-like)
+let myName = '';
+let roomCode = '';
+let isHost = false;
+let gameState = null;
+let timerInterval = null;
+let pendingExchangeWith = null;
+let pendingSnatchId = null;
+let snatchedCardData = null;
+let extraAction = null;
+let extraTarget = null;
+let localTimerRunning = false;
+let localTimerEnd = null;
+
+// ---- UTILS ----
+function generateId(len) {
+  return Math.random().toString(36).slice(2, 2 + len).toUpperCase();
+}
+function generateRoomCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from({length: 4}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
+// ---- SCREENS ----
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// ---- TOAST ----
+function toast(msg, type = 'info', duration = 3500) {
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => { el.style.animation = 'none'; el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, duration);
+}
+
+// ---- SUPABASE DB OPS ----
+async function saveGame(state) {
+  if (!supabaseClient) return;
+  state.updated_at = Date.now();
+  const { error } = await supabaseClient.from('games').upsert({ id: roomCode, state });
+  if (error) { console.error('Save error:', error); toast('Sync error: ' + error.message, 'error'); }
+}
+
+async function loadGame(code) {
+  const { data, error } = await supabaseClient.from('games').select('state').eq('id', code).single();
+  if (error || !data) return null;
+  return data.state;
+}
+
+async function subscribeToGame(code) {
+  if (gameChannel) { supabaseClient.removeChannel(gameChannel); }
+  gameChannel = supabaseClient
+    .channel('game:' + code)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'games', filter: `id=eq.${code}` },
+      (payload) => { if (payload.new && payload.new.state) { onStateUpdate(payload.new.state); } })
+    .subscribe();
+}
+
+// ---- LOBBY ACTIONS ----
+async function createGame() {
+  myName = document.getElementById('host-name').value.trim();
+  if (!myName) { toast('Enter your name', 'error'); return; }
+  const timerMin = parseInt(document.getElementById('host-timer').value) || 10;
+
+  roomCode = generateRoomCode();
+  isHost = true;
+
+  const initialState = {
+    roomCode,
+    phase: 'waiting',        // waiting | playing | ended
+    timerMinutes: timerMin,
+    timerEnd: null,
+    players: [{
+      id: myId, name: myName,
+      isCatcher: false, wristbands: 5,
+      card: null, eliminated: false, isHost: true
+    }],
+    bank: [],                // array of card objects {id, name, isExtra}
+    pendingExchanges: [],    // [{id, from, to, fromCard, toCard, timestamp}]
+    log: [],
+    extraCardsPool: 3,
+    winner: null
+  };
+
+  await saveGame(initialState);
+  gameState = initialState;
+  await subscribeToGame(roomCode);
+
+  document.getElementById('waiting-code').textContent = roomCode;
+  document.getElementById('host-start-area').style.display = 'block';
+  document.getElementById('guest-wait-area').style.display = 'none';
+  showScreen('screen-waiting');
+  renderWaiting();
+}
+
+async function joinGame() {
+  myName = document.getElementById('join-name').value.trim();
+  const code = document.getElementById('join-code').value.trim().toUpperCase();
+  if (!myName) { toast('Enter your name', 'error'); return; }
+  if (!code || code.length < 4) { toast('Enter a valid room code', 'error'); return; }
+
+  const state = await loadGame(code);
+  if (!state) { toast('Room not found!', 'error'); return; }
+  if (state.phase !== 'waiting') { toast('Game already in progress!', 'warn'); return; }
+  if (state.players.length >= 15) { toast('Room is full (max 15)', 'warn'); return; }
+  const nameExists = state.players.find(p => p.name.toLowerCase() === myName.toLowerCase());
+  if (nameExists) { toast('Name already taken in this room', 'warn'); return; }
+
+  roomCode = code;
+  isHost = false;
+
+  state.players.push({
+    id: myId, name: myName,
+    isCatcher: false, wristbands: 5,
+    card: null, eliminated: false, isHost: false
+  });
+  addLog(state, `${myName} joined the room.`);
+  await saveGame(state);
+  gameState = state;
+
+  await subscribeToGame(roomCode);
+  document.getElementById('waiting-code').textContent = roomCode;
+  document.getElementById('host-start-area').style.display = 'none';
+  document.getElementById('guest-wait-area').style.display = 'block';
+  showScreen('screen-waiting');
+  renderWaiting();
+}
+
+// ---- WAITING ROOM ----
+function renderWaiting() {
+  if (!gameState) return;
+  const players = gameState.players;
+  document.getElementById('waiting-count').textContent = players.length;
+  const list = document.getElementById('waiting-players');
+  list.innerHTML = '';
+  players.forEach(p => {
+    const chip = document.createElement('div');
+    chip.className = 'player-chip' + (p.isCatcher ? ' chip-catcher' : '');
+    const dot = document.createElement('div');
+    dot.className = 'chip-dot' + (p.isCatcher ? ' catcher' : '');
+    const name = document.createElement('span');
+    name.textContent = p.name + (p.id === myId ? ' (you)' : '') + (p.isHost ? ' 👑' : '');
+    chip.appendChild(dot);
+    chip.appendChild(name);
+    list.appendChild(chip);
+  });
+
+  if (isHost) {
+    const startBtn = document.getElementById('start-btn');
+    startBtn.disabled = players.length < 4;
+    startBtn.style.opacity = players.length < 4 ? '0.5' : '1';
+  }
+}
+
+// ---- START GAME ----
+async function startGame() {
+  if (!gameState) return;
+  const players = gameState.players;
+  if (players.length < 4) { toast('Need at least 4 players!', 'warn'); return; }
+
+  // Assign catcher randomly
+  const catcherIdx = Math.floor(Math.random() * players.length);
+  players.forEach((p, i) => { p.isCatcher = (i === catcherIdx); });
+
+  // Create name cards + extra cards, shuffle
+  const allCards = players.map(p => ({ id: generateId(6), name: p.name, isExtra: false }));
+  const extraCards = [
+    { id: generateId(6), name: 'EXTRA', isExtra: true, effect: null },
+    { id: generateId(6), name: 'EXTRA', isExtra: true, effect: null },
+    { id: generateId(6), name: 'EXTRA', isExtra: true, effect: null }
+  ];
+  const fullDeck = shuffle([...allCards, ...extraCards]);
+
+  // Deal 1 card per player
+  players.forEach((p, i) => { p.card = fullDeck[i]; });
+
+  // Remaining 3 cards go to bank (should be 3 extra cards since players = deck - 3)
+  const bankCards = fullDeck.slice(players.length);
+
+  const timerEnd = Date.now() + (gameState.timerMinutes * 60 * 1000);
+
+  const newState = {
+    ...gameState,
+    phase: 'playing',
+    timerEnd,
+    players,
+    bank: bankCards,
+    pendingExchanges: [],
+    log: ['Game started! The timer is running. Find your identity!'],
+    winner: null
+  };
+
+  await saveGame(newState);
+}
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// ---- STATE UPDATE (Realtime) ----
+function onStateUpdate(state) {
+  const prevPhase = gameState ? gameState.phase : null;
+  gameState = state;
+
+  if (state.phase === 'waiting') {
+    renderWaiting();
+  } else if (state.phase === 'playing') {
+    if (prevPhase !== 'playing') {
+      showScreen('screen-game');
+      startLocalTimer();
+    }
+    renderGame();
+  } else if (state.phase === 'ended') {
+    stopLocalTimer();
+    renderEndgame();
+    document.getElementById('overlay-endgame').classList.add('active');
+  }
+
+  // Check if I was eliminated
+  const me = getMe();
+  if (me && me.eliminated && state.phase === 'playing') {
+    toast('You have been eliminated! You can still watch.', 'error', 6000);
+  }
+}
+
+function getMe() {
+  if (!gameState) return null;
+  return gameState.players.find(p => p.id === myId);
+}
+
+function getActivePlayers() {
+  return gameState.players.filter(p => !p.eliminated);
+}
+
+// ---- TIMER ----
+function startLocalTimer() {
+  stopLocalTimer();
+  localTimerEnd = gameState.timerEnd;
+  localTimerRunning = true;
+  timerInterval = setInterval(tickTimer, 250);
+}
+
+function stopLocalTimer() {
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  localTimerRunning = false;
+}
+
+function tickTimer() {
+  if (!gameState || gameState.phase !== 'playing') { stopLocalTimer(); return; }
+  const remaining = localTimerEnd - Date.now();
+  const disp = document.getElementById('timer-display');
+  if (remaining <= 0) {
+    disp.textContent = '0:00';
+    disp.classList.add('urgent');
+    stopLocalTimer();
+    if (isHost) { triggerEndGame(); }
+    return;
+  }
+  const mins = Math.floor(remaining / 60000);
+  const secs = Math.floor((remaining % 60000) / 1000);
+  disp.textContent = `${mins}:${secs.toString().padStart(2,'0')}`;
+  if (remaining < 60000) { disp.classList.add('urgent'); }
+  else { disp.classList.remove('urgent'); }
+}
+
+// ---- RENDER GAME ----
+function renderGame() {
+  if (!gameState || gameState.phase !== 'playing') return;
+  const me = getMe();
+  if (!me) return;
+
+  // Role badge
+  const badge = document.getElementById('my-role-badge');
+  badge.textContent = me.isCatcher ? 'CATCHER' : 'SEEKER';
+  badge.className = 'role-badge ' + (me.isCatcher ? 'catcher' : 'seeker');
+
+  // My card
+  const cardEl = document.getElementById('my-identity-card');
+  const cardName = document.getElementById('my-card-name');
+  if (me.card) {
+    if (me.card.isExtra) {
+      cardEl.className = 'identity-card card-extra';
+      cardName.textContent = 'EXTRA';
+      cardEl.querySelector('.card-icon').textContent = '❓';
+      cardEl.querySelector('.card-label').textContent = 'extra card';
+    } else {
+      cardEl.className = 'identity-card card-front';
+      cardName.textContent = me.card.name;
+      cardEl.querySelector('.card-icon').textContent = '🪪';
+      cardEl.querySelector('.card-label').textContent = 'identity card';
+    }
+  }
+
+  // Wristbands
+  renderWristbands(me.wristbands);
+
+  // Players list
+  renderPlayersList();
+
+  // Bank
+  renderBank();
+
+  // Catcher-specific
+  const catcherZone = document.getElementById('catcher-zone');
+  const snatchBtn = document.getElementById('snatch-btn');
+  const seekerInfo = document.getElementById('seeker-info');
+  if (me.isCatcher) {
+    catcherZone.style.display = 'block';
+    snatchBtn.style.display = 'flex';
+    seekerInfo.style.display = 'none';
+  } else {
+    catcherZone.style.display = 'none';
+    snatchBtn.style.display = 'none';
+    seekerInfo.style.display = 'block';
+  }
+
+  // Log
+  renderLog();
+}
+
+function renderWristbands(count) {
+  const el = document.getElementById('my-wristbands');
+  el.innerHTML = '';
+  for (let i = 0; i < 5; i++) {
+    const band = document.createElement('div');
+    band.className = 'wristband ' + (i < count ? 'active' : 'lost');
+    el.appendChild(band);
+  }
+  document.getElementById('wristband-count').textContent = count + ' wristband' + (count !== 1 ? 's' : '');
+}
+
+function renderPlayersList() {
+  const list = document.getElementById('players-list');
+  list.innerHTML = '';
+  gameState.players.forEach(p => {
+    const row = document.createElement('div');
+    row.className = 'player-row' + (p.id === myId ? ' me' : '') + (p.isCatcher ? ' catcher-row' : '') + (p.eliminated ? ' eliminated' : '');
+    const nameEl = document.createElement('div');
+    nameEl.className = 'player-name-col';
+    nameEl.textContent = (p.isCatcher ? '🎩 ' : '') + p.name + (p.id === myId ? ' ✦' : '');
+    const bandsEl = document.createElement('div');
+    bandsEl.className = 'bands';
+    for (let i = 0; i < 5; i++) {
+      const b = document.createElement('div');
+      b.className = 'mini-band ' + (i < p.wristbands ? 'active' : 'lost');
+      bandsEl.appendChild(b);
+    }
+    row.appendChild(nameEl);
+    row.appendChild(bandsEl);
+    list.appendChild(row);
+  });
+}
+
+function renderBank() {
+  const el = document.getElementById('bank-cards');
+  const bank = gameState.bank || [];
+  if (bank.length === 0) {
+    el.innerHTML = '<span style="font-family:\'Courier Prime\',monospace; font-size:0.7rem; opacity:0.4; align-self:center;">empty</span>';
+    return;
+  }
+  el.innerHTML = '';
+  bank.forEach((card, idx) => {
+    const mini = document.createElement('div');
+    mini.className = 'bank-card-mini';
+    mini.title = 'Take this card from the bank';
+    mini.textContent = '🂠';
+    mini.onclick = () => takeFromBank(idx);
+    el.appendChild(mini);
+  });
+}
+
+function renderLog() {
+  const el = document.getElementById('log-entries');
+  const logs = gameState.log || [];
+  // Show last 20
+  const recent = logs.slice(-20);
+  el.innerHTML = '';
+  recent.reverse().forEach(msg => {
+    const entry = document.createElement('div');
+    entry.className = 'log-entry';
+    entry.textContent = msg;
+    el.appendChild(entry);
+  });
+}
+
+// ---- MODALS ----
+function closeModal(id) {
+  document.getElementById(id).classList.remove('active');
+}
+
+function openExchangeModal() {
+  const me = getMe();
+  if (!me || me.eliminated) { toast("You're eliminated!", 'error'); return; }
+  const list = document.getElementById('exchange-player-list');
+  list.innerHTML = '';
+  pendingExchangeWith = null;
+  const others = getActivePlayers().filter(p => p.id !== myId && !p.isCatcher);
+  if (others.length === 0) { toast('No players to exchange with', 'warn'); return; }
+  others.forEach(p => {
+    const item = document.createElement('div');
+    item.className = 'player-select-item';
+    item.innerHTML = `<span>👤</span><span>${p.name}</span>`;
+    item.onclick = () => {
+      document.querySelectorAll('#exchange-player-list .player-select-item').forEach(i => i.classList.remove('selected'));
+      item.classList.add('selected');
+      pendingExchangeWith = p.id;
+    };
+    list.appendChild(item);
+  });
+  document.getElementById('modal-exchange').classList.add('active');
+}
+
+async function confirmExchange() {
+  if (!pendingExchangeWith) { toast('Select a player first', 'warn'); return; }
+  const me = getMe();
+  const target = gameState.players.find(p => p.id === pendingExchangeWith);
+  if (!me || !target) return;
+
+  closeModal('modal-exchange');
+
+  // Register exchange (cards swap immediately, catcher can intercept)
+  const exchId = generateId(8);
+  const fromCard = me.card;
+  const toCard = target.card;
+
+  // Perform the swap
+  const state = { ...gameState };
+  const fromP = state.players.find(p => p.id === myId);
+  const toP = state.players.find(p => p.id === target.id);
+  fromP.card = toCard;
+  toP.card = fromCard;
+
+  // Record exchange for catcher
+  const exch = { id: exchId, from: myId, to: target.id, fromCard, toCard, timestamp: Date.now() };
+  state.pendingExchanges = [...(state.pendingExchanges || []), exch];
+  addLog(state, `${me.name} exchanged cards with ${target.name}.`);
+
+  await saveGame(state);
+
+  // Remove the pending exchange after 5 seconds (window for catcher)
+  setTimeout(async () => {
+    const fresh = await loadGame(roomCode);
+    if (!fresh) return;
+    fresh.pendingExchanges = (fresh.pendingExchanges || []).filter(e => e.id !== exchId);
+    await saveGame(fresh);
+  }, 5000);
+
+  toast(`Exchanged cards with ${target.name}!`, 'success');
+}
+
+async function visitBank() {
+  const me = getMe();
+  if (!me || me.eliminated) { toast("You're eliminated!", 'error'); return; }
+  const state = { ...gameState };
+  const bank = state.bank || [];
+  if (bank.length === 0) { toast('The bank is empty!', 'warn'); return; }
+
+  const p = state.players.find(p => p.id === myId);
+  const myCard = p.card;
+
+  // Random card from bank
+  const idx = Math.floor(Math.random() * bank.length);
+  const bankCard = bank[idx];
+  bank[idx] = myCard;
+  p.card = bankCard;
+  state.bank = bank;
+  addLog(state, `${me.name} visited the Identity Bank.`);
+  await saveGame(state);
+  toast('Swapped with a card from the bank!', 'info');
+}
+
+async function takeFromBank(idx) {
+  const me = getMe();
+  if (!me || me.eliminated) { toast("You're eliminated!", 'error'); return; }
+  const state = { ...gameState };
+  const bank = state.bank || [];
+  if (idx >= bank.length) { toast('Card not available', 'warn'); return; }
+
+  const p = state.players.find(p => p.id === myId);
+  const myCard = p.card;
+  const bankCard = bank[idx];
+  bank[idx] = myCard;
+  p.card = bankCard;
+  state.bank = bank;
+  addLog(state, `${me.name} took a card from the Identity Bank.`);
+  await saveGame(state);
+  toast('You took a card from the bank!', 'info');
+}
+
+// ---- EXTRA CARDS ----
+function openExtraModal() {
+  const me = getMe();
+  if (!me || me.eliminated) { toast("You're eliminated!", 'error'); return; }
+  if (!me.card || !me.card.isExtra) { toast("You don't hold an Extra Card!", 'warn'); return; }
+  document.getElementById('modal-extra').classList.add('active');
+}
+
+function useExtra(action) {
+  extraAction = action;
+  closeModal('modal-extra');
+
+  const titles = {
+    'roll_dice': '🎲 Roll The Dice — Choose a Player',
+    'swap_bank': '🏦 Swap With Bank — Choose a Player',
+    'lose_band': '💢 Lose A Band — Choose a Player'
+  };
+  document.getElementById('extra-target-title').textContent = titles[action];
+
+  const list = document.getElementById('extra-target-list');
+  list.innerHTML = '';
+  extraTarget = null;
+  const others = getActivePlayers().filter(p => p.id !== myId);
+  others.forEach(p => {
+    const item = document.createElement('div');
+    item.className = 'player-select-item';
+    item.innerHTML = `<span>👤</span><span>${p.name}</span>`;
+    item.onclick = () => {
+      document.querySelectorAll('#extra-target-list .player-select-item').forEach(i => i.classList.remove('selected'));
+      item.classList.add('selected');
+      extraTarget = p.id;
+    };
+    list.appendChild(item);
+  });
+  document.getElementById('modal-extra-target').classList.add('active');
+}
+
+async function confirmExtraTarget() {
+  if (!extraTarget) { toast('Select a player first', 'warn'); return; }
+  closeModal('modal-extra-target');
+
+  const me = getMe();
+  const target = gameState.players.find(p => p.id === extraTarget);
+  const state = { ...gameState };
+  const meP = state.players.find(p => p.id === myId);
+
+  // Consume the extra card (put it in the bank)
+  const usedCard = meP.card;
+  meP.card = null; // will be dealt with below
+
+  if (extraAction === 'roll_dice') {
+    // Roll die, target exchanges with player N seats to their right (among active)
+    const activePlayers = state.players.filter(p => !p.eliminated);
+    const roll = Math.floor(Math.random() * 6) + 1;
+    const targetIdx = activePlayers.findIndex(p => p.id === extraTarget);
+    const swapWithIdx = (targetIdx + roll) % activePlayers.length;
+    const swapWith = activePlayers[swapWithIdx];
+    const tp = state.players.find(p => p.id === extraTarget);
+    const sw = state.players.find(p => p.id === swapWith.id);
+    const tmp = tp.card; tp.card = sw.card; sw.card = tmp;
+    addLog(state, `${me.name} played Extra: Roll The Dice! Rolled ${roll}. ${target.name} swapped with ${swapWith.name}.`);
+    toast(`Rolled ${roll}! ${target.name} and ${swapWith.name} swapped cards.`, 'info', 5000);
+
+  } else if (extraAction === 'swap_bank') {
+    const tp = state.players.find(p => p.id === extraTarget);
+    const bank = state.bank || [];
+    if (bank.length > 0) {
+      const idx = Math.floor(Math.random() * bank.length);
+      const old = tp.card;
+      tp.card = bank[idx];
+      bank[idx] = old;
+      state.bank = bank;
+      addLog(state, `${me.name} played Extra: Swap With Bank! ${target.name} got a mystery card.`);
+      toast(`${target.name} swapped with the bank!`, 'info');
+    } else {
+      addLog(state, `${me.name} tried Swap With Bank but bank is empty!`);
+      toast('Bank is empty! Extra card wasted.', 'warn');
+    }
+
+  } else if (extraAction === 'lose_band') {
+    const tp = state.players.find(p => p.id === extraTarget);
+    tp.wristbands = Math.max(0, tp.wristbands - 1);
+    addLog(state, `${me.name} played Extra: Lose A Band! ${target.name} lost a wristband (now ${tp.wristbands}).`);
+    if (tp.wristbands === 0) {
+      tp.eliminated = true;
+      addLog(state, `${target.name} has been ELIMINATED!`);
+      toast(`${target.name} has been eliminated!`, 'error', 5000);
+    } else {
+      toast(`${target.name} lost a wristband!`, 'warn');
+    }
+  }
+
+  // Put the used extra card back into the bank
+  state.bank = [...(state.bank || []), usedCard];
+  // Assign meP a new card from bank if they have none
+  if (!meP.card && state.bank.length > 0) {
+    meP.card = state.bank.pop();
+    addLog(state, `${me.name} drew a replacement card.`);
+  }
+
+  await saveGame(state);
+}
+
+// ---- CATCHER: SNATCH ----
+function openSnatchModal() {
+  const me = getMe();
+  if (!me || !me.isCatcher) return;
+  const exchanges = gameState.pendingExchanges || [];
+  if (exchanges.length === 0) { toast('No active exchanges to snatch from!', 'warn'); return; }
+
+  const list = document.getElementById('snatch-exchange-list');
+  list.innerHTML = '';
+  pendingSnatchId = null;
+  exchanges.forEach(exch => {
+    const fromP = gameState.players.find(p => p.id === exch.from);
+    const toP = gameState.players.find(p => p.id === exch.to);
+    if (!fromP || !toP) return;
+    const item = document.createElement('div');
+    item.className = 'player-select-item';
+    item.innerHTML = `<span>🔄</span><span>${fromP.name} ↔ ${toP.name}</span>`;
+    item.onclick = () => {
+      document.querySelectorAll('#snatch-exchange-list .player-select-item').forEach(i => i.classList.remove('selected'));
+      item.classList.add('selected');
+      pendingSnatchId = exch.id;
+    };
+    list.appendChild(item);
+  });
+  document.getElementById('modal-snatch').classList.add('active');
+}
+
+async function confirmSnatch() {
+  // Called from snatch-exchange selection
+  if (!pendingSnatchId) { toast('Select an exchange', 'warn'); return; }
+  closeModal('modal-snatch');
+  await doSnatch(pendingSnatchId);
+}
+
+async function doSnatch(exchId) {
+  const state = { ...gameState };
+  const exch = (state.pendingExchanges || []).find(e => e.id === exchId);
+  if (!exch) { toast('Exchange no longer active', 'warn'); return; }
+
+  // Take the "from" player's card (the one they just received = toCard)
+  const fromP = state.players.find(p => p.id === exch.from);
+  if (!fromP) return;
+
+  // Snatch the card fromP currently holds (which is toCard after exchange)
+  snatchedCardData = fromP.card;
+  fromP.card = null; // catcher takes it temporarily
+  fromP.wristbands = Math.max(0, fromP.wristbands - 1);
+
+  const me = getMe();
+  addLog(state, `${me.name} (Catcher) SNATCHED a card from ${fromP.name}! ${fromP.name} loses a wristband (${fromP.wristbands} left).`);
+
+  if (fromP.wristbands === 0) {
+    fromP.eliminated = true;
+    addLog(state, `${fromP.name} has been ELIMINATED!`);
+  }
+
+  // Remove the pending exchange
+  state.pendingExchanges = state.pendingExchanges.filter(e => e.id !== exchId);
+
+  await saveGame(state);
+
+  // Show catcher decision modal
+  document.getElementById('snatched-card-name').textContent = snatchedCardData.isExtra ? 'Extra Card' : snatchedCardData.name;
+  document.getElementById('modal-snatch-result').classList.add('active');
+
+  toast(`Snatched a card! ${fromP.name} lost a wristband.`, 'warn', 5000);
+}
+
+async function snatchDecision(decision) {
+  closeModal('modal-snatch-result');
+  if (!snatchedCardData) return;
+
+  const state = await loadGame(roomCode);
+  if (!state) return;
+  const me = state.players.find(p => p.id === myId);
+
+  if (decision === 'bank') {
+    state.bank = [...(state.bank || []), snatchedCardData];
+    addLog(state, `Catcher sent the snatched card to the Identity Bank.`);
+    toast('Card sent to the bank!', 'info');
+  } else {
+    // Return to the victim — find the first player with no card (the snatched one)
+    const victim = state.players.find(p => !p.card && !p.eliminated && p.id !== myId);
+    if (victim) {
+      victim.card = snatchedCardData;
+      addLog(state, `Catcher returned the card to ${victim.name}.`);
+      toast(`Card returned to ${victim.name}.`, 'info');
+    } else {
+      // Fallback: put in bank
+      state.bank = [...(state.bank || []), snatchedCardData];
+    }
+  }
+
+  snatchedCardData = null;
+  await saveGame(state);
+}
+
+// Wire up snatch confirm
+document.getElementById('snatch-exchange-list').addEventListener('click', () => {
+  // handled via onclick on items
+});
+
+// Also add confirm button to snatch modal
+document.getElementById('modal-snatch').querySelector('.player-select-list');
+// Add confirm button dynamically
+(function() {
+  const modal = document.getElementById('modal-snatch');
+  const btnDiv = modal.querySelector('div[style]');
+  const confirmBtn = document.createElement('button');
+  confirmBtn.className = 'btn btn-red';
+  confirmBtn.textContent = 'Snatch!';
+  confirmBtn.onclick = confirmSnatch;
+  btnDiv.insertBefore(confirmBtn, btnDiv.firstChild);
+})();
+
+// ---- END GAME ----
+async function triggerEndGame() {
+  if (!isHost) return;
+  const state = await loadGame(roomCode);
+  if (!state || state.phase !== 'playing') return;
+  state.phase = 'ended';
+  addLog(state, 'Time is up! IDENTITY REVEAL!');
+  await saveGame(state);
+}
+
+function renderEndgame() {
+  if (!gameState) return;
+  const el = document.getElementById('endgame-results');
+  el.innerHTML = '';
+  gameState.players.forEach(p => {
+    const holdsOwn = p.card && p.card.name === p.name;
+    const item = document.createElement('div');
+    item.className = 'winner-item ' + (holdsOwn ? 'won' : 'lost');
+    item.innerHTML = `<span>${holdsOwn ? '🏆' : '💀'}</span><span style="flex:1">${p.name}</span><span style="font-size:0.8rem;">${p.card ? (p.card.isExtra ? '❓ Extra' : p.card.name) : 'No card'}</span>`;
+    el.appendChild(item);
+  });
+}
+
+async function playAgain() {
+  document.getElementById('overlay-endgame').classList.remove('active');
+  if (isHost) {
+    const state = await loadGame(roomCode);
+    if (!state) return;
+    // Reset to waiting
+    state.phase = 'waiting';
+    state.players.forEach(p => { p.card = null; p.eliminated = false; p.wristbands = 5; p.isCatcher = false; });
+    state.bank = [];
+    state.pendingExchanges = [];
+    state.log = [];
+    state.timerEnd = null;
+    await saveGame(state);
+  }
+}
+
+function goLobby() {
+  document.getElementById('overlay-endgame').classList.remove('active');
+  stopLocalTimer();
+  if (gameChannel) { supabaseClient.removeChannel(gameChannel); }
+  gameState = null;
+  showScreen('screen-lobby');
+}
+
+// ---- LOG HELPER ----
+function addLog(state, msg) {
+  state.log = [...(state.log || []), msg];
+  if (state.log.length > 100) { state.log = state.log.slice(-100); }
+}
+
+// ---- KEYBOARD ----
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active'));
+  }
+});
+
+// Close modals on overlay click
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) overlay.classList.remove('active');
+  });
+});
+
+// ---- BOOT ----
+(function boot() {
+  const url = localStorage.getItem('sb_url');
+  const key = localStorage.getItem('sb_key');
+  if (url && key) {
+    initSupabase(url, key);
+    showScreen('screen-lobby');
+  } else {
+    showScreen('screen-config');
+  }
+})();
+</script>
+</body>
+</html>
