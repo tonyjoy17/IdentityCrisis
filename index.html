@@ -875,8 +875,14 @@ ALTER PUBLICATION supabase_realtime ADD TABLE games;</div>
     <div class="endgame-title">GAME OVER</div>
     <div class="endgame-subtitle">All players reveal their identity cards</div>
     <div class="winner-list" id="endgame-results"></div>
-    <div style="display:flex; gap:10px; justify-content:center;">
+    <div id="endgame-host-actions" style="display:flex; gap:10px; justify-content:center;">
       <button class="btn btn-gold" onclick="playAgain()">Play Again</button>
+      <button class="btn btn-paper" onclick="goLobby()">Leave Game</button>
+    </div>
+    <div id="endgame-guest-actions" style="display:none; flex-direction:column; gap:10px; align-items:center;">
+      <div style="font-family:'Courier Prime',monospace; font-size:0.85rem; opacity:0.75;">
+        Waiting for the host to restart the room.
+      </div>
       <button class="btn btn-paper" onclick="goLobby()">Leave Game</button>
     </div>
   </div>
@@ -1737,6 +1743,8 @@ async function triggerEndGame() {
 
 function renderEndgame() {
   if (!gameState) return;
+  document.getElementById('endgame-host-actions').style.display = isHost ? 'flex' : 'none';
+  document.getElementById('endgame-guest-actions').style.display = isHost ? 'none' : 'flex';
   const el = document.getElementById('endgame-results');
   el.innerHTML = '';
   gameState.players.forEach(p => {

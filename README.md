@@ -94,7 +94,7 @@ When the timer ends, everyone reveals their card. Any player holding their own n
 - Wristband system
 - Live event log
 - Configurable timer
-- Play Again without rejoining
+- Host-only Play Again without rejoining
 - Mobile-friendly layout
 
 ## Tech Stack
